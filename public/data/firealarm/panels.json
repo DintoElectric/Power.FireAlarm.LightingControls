@@ -1,0 +1,96 @@
+{
+  "system": "firealarm",
+  "project": "Hartford Hospital Conklin Building - Observation Unit Renovation Phase II",
+  "source": "Derived from Johnson Controls fire alarm shop drawings FA-101, FA-102 and FA-201 (Rev 1). Draft - confirm in field.",
+  "draft": true,
+  "panels": [
+    {
+      "panel": "N1",
+      "title": "PANEL N1 (NODE 29) - NAC / VISUAL CIRCUITS V1 - V5",
+      "type": "4009 EXTENDER PLUS",
+      "node": "29 - NAC EXTENDER",
+      "power": "120 VAC DEDICATED CIRCUIT",
+      "loops": [
+        {
+          "id": "29:N1:V1",
+          "label": "V1",
+          "eol": "EOL 10K",
+          "devices": [
+            { "id": "29:N1:V1-1",  "type": "STROBE",         "cd": 30, "tap": "",   "wp": false, "room": "CB104A", "name": "PROGRESSION",          "confirm": false },
+            { "id": "29:N1:V1-2",  "type": "STROBE",         "cd": 15, "tap": "",   "wp": false, "room": "CB104",  "name": "WOUND CARE RECEPTION", "confirm": false },
+            { "id": "29:N1:V1-3",  "type": "STROBE",         "cd": 15, "tap": "",   "wp": false, "room": "CB146",  "name": "WOUND CARE OFFICE",    "confirm": false },
+            { "id": "29:N1:V1-4",  "type": "STROBE",         "cd": 15, "tap": "",   "wp": false, "room": "CB147",  "name": "OFFICE #1",            "confirm": false },
+            { "id": "29:N1:V1-5",  "type": "STROBE",         "cd": 15, "tap": "",   "wp": false, "room": "CB148",  "name": "OFFICE #2",            "confirm": false },
+            { "id": "29:N1:V1-6",  "type": "SPEAKER/STROBE", "cd": 75, "tap": "2W", "wp": false, "room": "CB149",  "name": "NURSE STATION A",      "confirm": false },
+            { "id": "29:N1:V1-7",  "type": "STROBE",         "cd": 15, "tap": "",   "wp": false, "room": "CB153",  "name": "PATIENT TOILET",       "confirm": false },
+            { "id": "29:N1:V1-8",  "type": "STROBE",         "cd": 15, "tap": "",   "wp": false, "room": "CB155",  "name": "STAFF TOILET",         "confirm": true  },
+            { "id": "29:N1:V1-9",  "type": "STROBE",         "cd": 30, "tap": "",   "wp": false, "room": "CB172",  "name": "MED ROOM",             "confirm": false },
+            { "id": "29:N1:V1-10", "type": "SPEAKER/STROBE", "cd": 75, "tap": "1W", "wp": false, "room": "CB104B", "name": "WOUND CARE WAITING",   "confirm": false }
+          ]
+        },
+        {
+          "id": "29:N1:V2",
+          "label": "V2",
+          "eol": "EOL 10K",
+          "devices": [
+            { "id": "29:N1:V2-1",  "type": "STROBE", "cd": 15, "tap": "", "wp": false, "room": "CB109", "name": "PATIENT RM. #1",  "confirm": true  },
+            { "id": "29:N1:V2-2",  "type": "STROBE", "cd": 15, "tap": "", "wp": false, "room": "CB110", "name": "PATIENT RM. #2",  "confirm": false },
+            { "id": "29:N1:V2-3",  "type": "STROBE", "cd": 15, "tap": "", "wp": false, "room": "CB111", "name": "PATIENT RM. #3",  "confirm": false },
+            { "id": "29:N1:V2-4",  "type": "STROBE", "cd": 15, "tap": "", "wp": false, "room": "CB112", "name": "PATIENT RM. #4",  "confirm": false },
+            { "id": "29:N1:V2-5",  "type": "STROBE", "cd": 15, "tap": "", "wp": false, "room": "CB113", "name": "PATIENT RM. #5",  "confirm": false },
+            { "id": "29:N1:V2-6",  "type": "STROBE", "cd": 15, "tap": "", "wp": false, "room": "CB113", "name": "PATIENT RM. #5",  "confirm": true  },
+            { "id": "29:N1:V2-7",  "type": "STROBE", "cd": 15, "tap": "", "wp": false, "room": "CB115", "name": "PATIENT RM. #7",  "confirm": false },
+            { "id": "29:N1:V2-8",  "type": "STROBE", "cd": 15, "tap": "", "wp": false, "room": "CB116", "name": "PATIENT RM. #8",  "confirm": false },
+            { "id": "29:N1:V2-9",  "type": "STROBE", "cd": 15, "tap": "", "wp": false, "room": "CB117", "name": "PATIENT RM. #9",  "confirm": false },
+            { "id": "29:N1:V2-10", "type": "STROBE", "cd": 15, "tap": "", "wp": false, "room": "CB118", "name": "PATIENT RM. #10", "confirm": false },
+            { "id": "29:N1:V2-11", "type": "STROBE", "cd": 15, "tap": "", "wp": false, "room": "CB119", "name": "PATIENT RM. #11", "confirm": false },
+            { "id": "29:N1:V2-12", "type": "STROBE", "cd": 15, "tap": "", "wp": false, "room": "CB120", "name": "PATIENT RM. #12", "confirm": false }
+          ]
+        },
+        {
+          "id": "29:N1:V3",
+          "label": "V3",
+          "eol": "EOL 10K",
+          "devices": [
+            { "id": "29:N1:V3-1", "type": "STROBE",         "cd": 15, "tap": "",   "wp": false, "room": "CB145", "name": "PATIENT RM. #25",    "confirm": false },
+            { "id": "29:N1:V3-2", "type": "STROBE",         "cd": 15, "tap": "",   "wp": false, "room": "CB157", "name": "CLEAN SUPPLY PYXIS", "confirm": false },
+            { "id": "29:N1:V3-3", "type": "STROBE",         "cd": 15, "tap": "",   "wp": false, "room": "CB159", "name": "PATIENT TOILET",     "confirm": false },
+            { "id": "29:N1:V3-4", "type": "SPEAKER/STROBE", "cd": 75, "tap": "1W", "wp": false, "room": "CB161", "name": "NURSE STATION B",    "confirm": false },
+            { "id": "29:N1:V3-5", "type": "STROBE",         "cd": 15, "tap": "",   "wp": false, "room": "CB162", "name": "ELECTRICAL",         "confirm": false },
+            { "id": "29:N1:V3-6", "type": "STROBE",         "cd": 15, "tap": "",   "wp": false, "room": "CB164", "name": "MED ROOM",           "confirm": false },
+            { "id": "29:N1:V3-7", "type": "SPEAKER/STROBE", "cd": 75, "tap": "1W", "wp": false, "room": "CB165", "name": "NURSE STATION C",    "confirm": false }
+          ]
+        },
+        {
+          "id": "29:N1:V4",
+          "label": "V4",
+          "eol": "EOL 10K",
+          "devices": [
+            { "id": "29:N1:V4-1", "type": "STROBE", "cd": 30, "tap": "", "wp": false, "room": "CB122", "name": "PATIENT RM. #13", "confirm": false },
+            { "id": "29:N1:V4-2", "type": "STROBE", "cd": 30, "tap": "", "wp": false, "room": "CB128", "name": "PATIENT RM. #14", "confirm": false },
+            { "id": "29:N1:V4-3", "type": "STROBE", "cd": 30, "tap": "", "wp": false, "room": "CB129", "name": "PATIENT RM. #15", "confirm": false },
+            { "id": "29:N1:V4-4", "type": "STROBE", "cd": 30, "tap": "", "wp": false, "room": "CB130", "name": "PATIENT RM. #16", "confirm": false },
+            { "id": "29:N1:V4-5", "type": "STROBE", "cd": 30, "tap": "", "wp": false, "room": "CB131", "name": "PATIENT RM. #17", "confirm": false }
+          ]
+        },
+        {
+          "id": "29:N1:V5",
+          "label": "V5",
+          "eol": "EOL 10K",
+          "devices": [
+            { "id": "29:N1:V5-1",  "type": "STROBE",    "cd": 15, "tap": "", "wp": false, "room": "CB144", "name": "PATIENT RM. #24",       "confirm": false },
+            { "id": "29:N1:V5-2",  "type": "STROBE",    "cd": 30, "tap": "", "wp": false, "room": "CB143", "name": "PATIENT RM. #22",       "confirm": false },
+            { "id": "29:N1:V5-3",  "type": "STROBE",    "cd": 30, "tap": "", "wp": false, "room": "CB142", "name": "PATIENT RM. #21",       "confirm": false },
+            { "id": "29:N1:V5-4",  "type": "STROBE",    "cd": 30, "tap": "", "wp": false, "room": "CB140", "name": "PATIENT RM. #20",       "confirm": false },
+            { "id": "29:N1:V5-5",  "type": "STROBE",    "cd": 30, "tap": "", "wp": false, "room": "CB139", "name": "PATIENT RM. #19",       "confirm": false },
+            { "id": "29:N1:V5-6",  "type": "STROBE",    "cd": 30, "tap": "", "wp": false, "room": "CB132", "name": "PATIENT RM. #18",       "confirm": false },
+            { "id": "29:N1:V5-7",  "type": "STROBE",    "cd": 15, "tap": "", "wp": false, "room": "CB121", "name": "SOILED WORKROOM",       "confirm": true  },
+            { "id": "29:N1:V5-8",  "type": "STROBE",    "cd": 15, "tap": "", "wp": false, "room": "CB166", "name": "PATIENT TOILET",        "confirm": false },
+            { "id": "29:N1:V5-9",  "type": "WP STROBE", "cd": 75, "tap": "", "wp": true,  "room": "CB169", "name": "PATIENT TOILET/SHOWER", "confirm": false },
+            { "id": "29:N1:V5-10", "type": "STROBE",    "cd": 30, "tap": "", "wp": false, "room": "CB171", "name": "STAFF LOUNGE",          "confirm": false }
+          ]
+        }
+      ]
+    }
+  ]
+}
