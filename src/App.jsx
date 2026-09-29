@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import DrawingViewer from './DrawingViewer';
 import JboxEditor from './JboxEditor';
 import FireAlarmAdmin from './FireAlarmAdmin';
@@ -13,6 +13,17 @@ const FN_OVR = '/.netlify/functions/overrides';
 
 const DISCLAIMER =
   'QUALIFIED PERSONNEL ONLY. Reference only — not a safe-to-work determination. Live/dead indications and all data shown may be inaccurate or out of date; never rely on this application to determine whether a panel or circuit is energized. Only qualified persons, as defined by NFPA 70E, may examine, adjust, service, or work on this equipment. Always establish an electrically safe work condition per NFPA 70E — apply lockout/tagout and verify the absence of voltage — before working. Paul Dinto Electrical Contractors assumes no liability for any reliance on this application.';
+
+// QR label paths: /p/<panel> = Power, /fa/<panel> = Fire Alarm, /lc/<panel> = Lighting Control
+function systemFromPath(pathname) {
+  if (/^\/fa(\/|$)/.test(pathname)) return 'firealarm';
+  if (/^\/lc(\/|$)/.test(pathname)) return 'lighting';
+  return 'power';
+}
+
+function safeDecode(s) {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
 
 function panelFromSlug(slug, panels) {
   if (!slug) return null;
@@ -89,6 +100,8 @@ function SystemSwitch({ system, onChange }) {
 
 export default function App() {
   const { slug } = useParams();
+  const loc = useLocation();
+  const startSystem = systemFromPath(loc.pathname);
   const [rawPanels, setRawPanels] = useState([]);
   const [sheets, setSheets] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -112,11 +125,11 @@ export default function App() {
   const [floor, setFloor] = useState('All');
   const [sheetId, setSheetId] = useState(null);
   const [full, setFull] = useState(false);
-  const [collapsed, setCollapsed] = useState(!!slug);
+  const [collapsed, setCollapsed] = useState(!!slug && startSystem === 'power');
   const [jboxEdit, setJboxEdit] = useState(false);
   const [discShow, setDiscShow] = useState(true);
   const [discAck, setDiscAck] = useState(false);
-  const [system, setSystem] = useState('power');
+  const [system, setSystem] = useState(startSystem);
 
   const applyOverrides = (d) => setOverrides({
     status: d.status || {}, circuits: d.circuits || {}, edited: d.edited || {},
@@ -129,9 +142,9 @@ export default function App() {
       fetch('/data/panels.json').then((r) => r.json()),
       fetch('/data/drawings.json').then((r) => r.json()),
       fetch('/data/panel_locations.json').then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
-    ]).then(([pd, dd, loc]) => {
+    ]).then(([pd, dd, loc2]) => {
       if (!alive) return;
-      setRawPanels(pd.panels); setSheets(dd.sheets); setLocations(loc || {}); setLoaded(true);
+      setRawPanels(pd.panels); setSheets(dd.sheets); setLocations(loc2 || {}); setLoaded(true);
     }).catch(() => { if (alive) setLoaded(true); });
     return () => { alive = false; };
   }, []);
@@ -392,7 +405,10 @@ export default function App() {
       </header>
 
       {system !== 'power' ? (
-        <FireAlarmAdmin system={system} admin={admin} token={token} onUnauthorized={logout} />
+        <FireAlarmAdmin
+          system={system} admin={admin} token={token} onUnauthorized={logout}
+          initialPanel={slug && system === startSystem ? safeDecode(slug) : null}
+        />
       ) : (
       <div className="grid" style={{ gridTemplateColumns: gridCols }}>
         {!full && !collapsed && (
