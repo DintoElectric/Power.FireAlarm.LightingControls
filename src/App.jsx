@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import DrawingViewer from './DrawingViewer';
 import JboxEditor from './JboxEditor';
+import FireAlarmAdmin from './FireAlarmAdmin';
 import {
   floorOf, sheetFloor, linkedSheets, boxPlacements, distinctLabels,
   breaker, isSpare, sourceLabel, FLOOR_ORDER, naturalSort,
@@ -68,6 +69,24 @@ function ScheduleCells({ cell }) {
   return (<><td rowSpan={cell.span}>{c.poles || 1}</td><td rowSpan={cell.span}>{c.amps || ''}</td><td rowSpan={cell.span} className="d">{c.desc}</td></>);
 }
 
+const SYSTEMS = [
+  { id: 'power', label: 'Power' },
+  { id: 'firealarm', label: 'Fire Alarm' },
+  { id: 'lighting', label: 'Lighting Control' },
+];
+
+function SystemSwitch({ system, onChange }) {
+  return (
+    <div className="floor-chips" style={{ margin: 0 }}>
+      {SYSTEMS.map((s) => (
+        <button key={s.id} className="fbtn" data-on={s.id === system ? '1' : '0'} onClick={() => onChange(s.id)}>
+          {s.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
   const { slug } = useParams();
   const [rawPanels, setRawPanels] = useState([]);
@@ -97,6 +116,7 @@ export default function App() {
   const [jboxEdit, setJboxEdit] = useState(false);
   const [discShow, setDiscShow] = useState(true);
   const [discAck, setDiscAck] = useState(false);
+  const [system, setSystem] = useState('power');
 
   const applyOverrides = (d) => setOverrides({
     status: d.status || {}, circuits: d.circuits || {}, edited: d.edited || {},
@@ -338,13 +358,14 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         {!full && (
-          <button className="fbtn collapse-btn" data-on={collapsed ? '0' : '1'} onClick={() => setCollapsed((v) => !v)}
+          <button className="fbtn collapse-btn" style={system === 'power' ? undefined : { display: 'none' }} data-on={collapsed ? '0' : '1'} onClick={() => setCollapsed((v) => !v)}
             title={collapsed ? 'Show panel list' : 'Hide panel list'} aria-label="Toggle panel list">☰ Panels</button>
         )}
         <span className="wordmark">Dinto <span className="wordmark-2">As-Builts</span></span>
         <span className="tag tag-neutral">Public link · no sign-in</span>
+        <SystemSwitch system={system} onChange={setSystem} />
         <input
-          className="input search"
+          className="input search" style={system === 'power' ? undefined : { display: 'none' }}
           placeholder={panels.length ? `Search ${totalCircuits.toLocaleString()} circuits — try REFRIGERATOR, RTU, 324A` : 'Search circuits'}
           value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search circuits"
         />
@@ -352,7 +373,7 @@ export default function App() {
         <div className="admin-box">
           {admin ? (
             <>
-              <button className="btn btn-secondary" onClick={() => setJboxEdit(true)}>Edit J-boxes</button>
+              {system === 'power' && <button className="btn btn-secondary" onClick={() => setJboxEdit(true)}>Edit J-boxes</button>}
               <span className="tag tag-accent">Admin</span>
               <button className="btn btn-ghost" onClick={logout}>Log out</button>
             </>
@@ -370,6 +391,9 @@ export default function App() {
         </div>
       </header>
 
+      {system !== 'power' ? (
+        <FireAlarmAdmin system={system} admin={admin} token={token} onUnauthorized={logout} />
+      ) : (
       <div className="grid" style={{ gridTemplateColumns: gridCols }}>
         {!full && !collapsed && (
           <aside className="col-panels scrolly">
@@ -542,6 +566,7 @@ export default function App() {
           full={full} onToggleFull={() => setFull((v) => !v)} circuitLive={circuitLive}
         />
       </div>
+      )}
     </div>
 
     {/* Safety disclaimer — full-screen acknowledgment gate on load, then a re-read bubble */}
@@ -566,7 +591,7 @@ export default function App() {
       <JboxEditor sheets={mergedSheets} onSave={saveJbox} onClose={() => setJboxEdit(false)} />
     )}
 
-    {panel && !jboxEdit && (
+    {system === 'power' && panel && !jboxEdit && (
       <div className="print-schedule">
         <div className="ps-head">
           <img className="ps-logo" src="/dinto-logo.png" alt="Dinto Electrical Contractors" />
