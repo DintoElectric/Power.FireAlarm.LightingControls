@@ -4,7 +4,7 @@ const FN_OVR = '/.netlify/functions/overrides';
 const LABELS = { firealarm: 'Fire Alarm', lighting: 'Lighting Control' };
 const COLOR = '#1f6feb';
 const PENDING = '#9aa0a6';
-const AMBER = '#b26a00';
+const AMBER = '#d9a441';
 
 const devLabel = (d) => (d.type === 'SPEAKER/STROBE'
   ? `SPKR/STROBE ${d.cd}cd${d.tap ? ' · ' + d.tap : ''}`
