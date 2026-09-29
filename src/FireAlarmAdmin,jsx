@@ -16,7 +16,7 @@ const stamp = (p) => {
   return [when, p.by].filter(Boolean).join(' · ');
 };
 
-export default function FireAlarmAdmin({ system, admin, token, onUnauthorized }) {
+export default function FireAlarmAdmin({ system, admin, token, onUnauthorized, initialPanel }) {
   const [data, setData] = useState(null);
   const [loadState, setLoadState] = useState('loading'); // loading | ok | missing
   const [progress, setProgress] = useState({ devices: {}, runs: {} });
@@ -35,7 +35,10 @@ export default function FireAlarmAdmin({ system, admin, token, onUnauthorized })
       .then((d) => {
         if (!alive) return;
         if (!d || !Array.isArray(d.panels) || !d.panels.length) throw new Error('empty');
-        setData(d); setSelPanel(d.panels[0].panel); setLoadState('ok');
+        // open on the scanned panel if the QR named one that exists, else the first panel
+        const want = initialPanel ? String(initialPanel).toUpperCase() : null;
+        const match = want ? d.panels.find((p) => String(p.panel).toUpperCase() === want) : null;
+        setData(d); setSelPanel((match || d.panels[0]).panel); setLoadState('ok');
       })
       .catch(() => { if (alive) setLoadState('missing'); });
     return () => { alive = false; };
