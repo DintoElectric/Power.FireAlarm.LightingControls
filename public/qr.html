@@ -25,11 +25,12 @@
   .card .qr { display:flex; justify-content:center; }
   .card .qr img, .card .qr canvas { width:130px !important; height:130px !important; }
   .card .name { font-family:ui-monospace,Menlo,monospace; font-size:16px; font-weight:600; margin-top:8px; word-break:break-word; }
+  .card .sys { font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-top:2px; }
   .card .url { font-size:9px; color:var(--muted); margin-top:3px; word-break:break-all; }
   .card .dl { display:inline-block; margin-top:8px; font-size:11px; color:var(--accent); border:1px solid #cfd0d8; border-radius:5px; padding:3px 9px; cursor:pointer; text-decoration:none; }
   .card .dl:hover { background:#f4f3fa; }
   @media print { .card .dl { display:none; } }
-  .empty { color:var(--muted); font-size:13px; padding:30px; }
+  .empty { color:var(--muted); font-size:13px; padding:30px; grid-column:1 / -1; }
   @media print {
     header { display:none; }
     main { padding:0; gap:8px; grid-template-columns:repeat(4,1fr); }
@@ -41,6 +42,7 @@
 <body>
 <header>
   <h1>Dinto <span>As-Builts</span> · QR labels</h1>
+  <div class="chips" id="systems"></div>
   <label>Site address
     <input id="base" type="text" placeholder="https://asbuilt.dintoelectric.com" />
   </label>
@@ -50,18 +52,26 @@
 </header>
 <main id="grid"><div class="empty">Loading panels…</div></main>
 <script>
-  var PANELS = [], FLOOR = 'All';
+  // Each system has its own data file and its own QR path.
+  // Power keeps /p/<panel> so labels already printed keep working.
+  var SYSTEMS = [
+    { id: 'power',     label: 'Power',            data: 'data/panels.json',            path: '/p/',  tag: '',                  filePrefix: '' },
+    { id: 'firealarm', label: 'Fire Alarm',       data: 'data/firealarm/panels.json',  path: '/fa/', tag: 'Fire Alarm',        filePrefix: 'FA-' },
+    { id: 'lighting',  label: 'Lighting Control', data: 'data/lighting/panels.json',   path: '/lc/', tag: 'Lighting Control',  filePrefix: 'LC-' }
+  ];
+  var SYS = SYSTEMS[0], PANELS = [], FLOOR = 'All';
+
   function floorOf(p){ var m=String(p).match(/(\d)-/); return m ? 'Level '+m[1] : 'Other'; }
   function baseUrl(){
     var v = document.getElementById('base').value.trim().replace(/\/+$/,'');
     return v || 'https://asbuilt.dintoelectric.com';
   }
-  function panelUrl(name){ return baseUrl() + '/p/' + encodeURIComponent(name); }
+  function panelUrl(name){ return baseUrl() + SYS.path + encodeURIComponent(name); }
 
   function render(){
     var grid = document.getElementById('grid');
     grid.innerHTML = '';
-    var list = PANELS.filter(function(p){ return FLOOR==='All' || floorOf(p)===FLOOR; });
+    var list = PANELS.filter(function(p){ return SYS.id !== 'power' || FLOOR==='All' || floorOf(p)===FLOOR; });
     document.getElementById('count').textContent = list.length + ' label' + (list.length===1?'':'s');
     if(!list.length){ grid.innerHTML = '<div class="empty">No panels.</div>'; return; }
     list.forEach(function(name){
@@ -70,9 +80,10 @@
       var qr = document.createElement('div'); qr.className='qr';
       card.appendChild(qr);
       var nm = document.createElement('div'); nm.className='name'; nm.textContent=name; card.appendChild(nm);
+      if (SYS.tag) { var st = document.createElement('div'); st.className='sys'; st.textContent=SYS.tag; card.appendChild(st); }
       var u = document.createElement('div'); u.className='url'; u.textContent=url; card.appendChild(u);
       var dl = document.createElement('a'); dl.className='dl'; dl.textContent='Download PNG';
-      dl.onclick = function(){ var cv = qr.querySelector('canvas'); if(cv){ var a=document.createElement('a'); a.download=name+'.png'; a.href=cv.toDataURL('image/png'); a.click(); } };
+      dl.onclick = function(){ var cv = qr.querySelector('canvas'); if(cv){ var a=document.createElement('a'); a.download=SYS.filePrefix+name+'.png'; a.href=cv.toDataURL('image/png'); a.click(); } };
       card.appendChild(dl);
       grid.appendChild(card);
       new QRCode(qr, { text:url, width:130, height:130, correctLevel: QRCode.CorrectLevel.M });
@@ -80,9 +91,11 @@
   }
 
   function buildFloors(){
+    var host=document.getElementById('floors');
+    host.innerHTML = '';
+    if (SYS.id !== 'power') return; // floor filter only applies to Power panel names
     var order=['Level 1','Level 2','Level 3','Level 4','Level 5','Other'];
     var present=order.filter(function(f){ return PANELS.some(function(p){ return floorOf(p)===f; }); });
-    var host=document.getElementById('floors');
     ['All'].concat(present).forEach(function(f){
       var b=document.createElement('button'); b.className='chip'; b.textContent=(f==='All'?'All':f.replace('Level ','L'));
       b.setAttribute('aria-pressed', f===FLOOR ? 'true':'false');
@@ -91,14 +104,43 @@
     });
   }
 
+  function buildSystems(){
+    var host=document.getElementById('systems');
+    host.innerHTML = '';
+    SYSTEMS.forEach(function(s){
+      var b=document.createElement('button'); b.className='chip'; b.textContent=s.label;
+      b.setAttribute('aria-pressed', s.id===SYS.id ? 'true':'false');
+      b.onclick=function(){ loadSystem(s); };
+      host.appendChild(b);
+    });
+  }
+
+  function loadSystem(s){
+    SYS = s; FLOOR = 'All'; PANELS = [];
+    buildSystems();
+    document.getElementById('floors').innerHTML = '';
+    document.getElementById('count').textContent = '';
+    var grid = document.getElementById('grid');
+    grid.innerHTML = '<div class="empty">Loading panels…</div>';
+    fetch(s.data).then(function(r){
+      if(!r.ok) throw new Error('missing');
+      return r.json();
+    }).then(function(d){
+      if(!d || !Array.isArray(d.panels) || !d.panels.length) throw new Error('empty');
+      PANELS = d.panels.map(function(p){ return p.panel; }).sort(function(a,b){ return a.localeCompare(b,undefined,{numeric:true}); });
+      buildFloors(); render();
+    }).catch(function(){
+      grid.innerHTML = s.id === 'power'
+        ? '<div class="empty">Could not load panels.json — make sure this page is opened from the deployed site.</div>'
+        : '<div class="empty">No ' + s.label + ' data yet — labels will appear here once panels are added.</div>';
+    });
+  }
+
   // default the site field to this page's origin when served over http(s)
   if (location.origin && /^https?:/.test(location.origin)) document.getElementById('base').value = location.origin;
   document.getElementById('base').addEventListener('input', render);
 
-  fetch('data/panels.json').then(function(r){ return r.json(); }).then(function(d){
-    PANELS = d.panels.map(function(p){ return p.panel; }).sort(function(a,b){ return a.localeCompare(b,undefined,{numeric:true}); });
-    buildFloors(); render();
-  }).catch(function(){ document.getElementById('grid').innerHTML='<div class="empty">Could not load panels.json — make sure this page is opened from the deployed site.</div>'; });
+  loadSystem(SYSTEMS[0]);
 </script>
 </body>
 </html>
