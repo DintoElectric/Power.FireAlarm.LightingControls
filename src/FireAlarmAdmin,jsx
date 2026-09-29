@@ -1,0 +1,258 @@
+import { useEffect, useState } from 'react';
+
+const FN_OVR = '/.netlify/functions/overrides';
+const LABELS = { firealarm: 'Fire Alarm', lighting: 'Lighting Control' };
+const COLOR = '#1f6feb';
+const PENDING = '#9aa0a6';
+const AMBER = '#b26a00';
+
+const devLabel = (d) => (d.type === 'SPEAKER/STROBE'
+  ? `SPKR/STROBE ${d.cd}cd${d.tap ? ' · ' + d.tap : ''}`
+  : `${d.type} ${d.cd}cd`);
+
+const stamp = (p) => {
+  if (!p) return '';
+  const when = p.at ? new Date(p.at).toLocaleDateString() : '';
+  return [when, p.by].filter(Boolean).join(' · ');
+};
+
+export default function FireAlarmAdmin({ system, admin, token, onUnauthorized }) {
+  const [data, setData] = useState(null);
+  const [loadState, setLoadState] = useState('loading'); // loading | ok | missing
+  const [progress, setProgress] = useState({ devices: {}, runs: {} });
+  const [selPanel, setSelPanel] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+  const [err, setErr] = useState('');
+
+  const label = LABELS[system] || system;
+
+  // Static shop-drawing data for this system
+  useEffect(() => {
+    let alive = true;
+    setLoadState('loading'); setData(null); setSelPanel(null);
+    fetch(`/data/${system}/panels.json`)
+      .then((r) => { if (!r.ok) throw new Error('missing'); return r.json(); })
+      .then((d) => {
+        if (!alive) return;
+        if (!d || !Array.isArray(d.panels) || !d.panels.length) throw new Error('empty');
+        setData(d); setSelPanel(d.panels[0].panel); setLoadState('ok');
+      })
+      .catch(() => { if (alive) setLoadState('missing'); });
+    return () => { alive = false; };
+  }, [system]);
+
+  // Progress marks (installed / pulled), shared and stored by the backend
+  const refresh = () => {
+    fetch(`${FN_OVR}?system=${system}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setProgress({ devices: d.devices || {}, runs: d.runs || {} }); })
+      .catch(() => { /* backend not up yet */ });
+  };
+  useEffect(() => {
+    setProgress({ devices: {}, runs: {} });
+    refresh();
+    const onFocus = () => refresh();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [system]);
+
+  const toggle = async (kind, id) => {
+    if (!admin) return;
+    const bucket = kind === 'device' ? 'devices' : 'runs';
+    const done = !(progress[bucket][id] && progress[bucket][id].done);
+    setBusyKey(kind + ':' + id); setErr('');
+    try {
+      const r = await fetch(FN_OVR, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+        body: JSON.stringify({ action: 'setProgress', system, kind, id, done }),
+      });
+      if (r.status === 401) {
+        onUnauthorized();
+        setErr('Session expired — log in again.');
+      } else {
+        const d = await r.json().catch(() => null);
+        if (d && d.data) setProgress({ devices: d.data.devices || {}, runs: d.data.runs || {} });
+        else setErr('Save failed — try again.');
+      }
+    } catch {
+      setErr('Save failed — check your connection.');
+    }
+    setBusyKey(null);
+  };
+
+  const wrap = { padding: '16px 20px', overflow: 'auto', flex: 1, minHeight: 0 };
+
+  if (loadState === 'loading') {
+    return <div style={wrap}><div className="status">Loading {label}…</div></div>;
+  }
+  if (loadState === 'missing') {
+    return (
+      <div style={wrap}>
+        <div className="designation mono" style={{ marginBottom: 8 }}>{label}</div>
+        <div className="status">No {label} data has been added yet.</div>
+      </div>
+    );
+  }
+
+  const panel = data.panels.find((p) => p.panel === selPanel) || data.panels[0];
+  const doneDev = (id) => !!(progress.devices[id] && progress.devices[id].done);
+  const doneRun = (id) => !!(progress.runs[id] && progress.runs[id].done);
+
+  // panel-wide totals
+  let devTotal = 0, devDone = 0, runTotal = 0, runDone = 0;
+  panel.loops.forEach((lp) => {
+    lp.devices.forEach((d) => { devTotal += 1; if (doneDev(d.id)) devDone += 1; });
+    for (let i = 0; i <= lp.devices.length; i++) {
+      runTotal += 1; if (doneRun(`${lp.id}:R${i}`)) runDone += 1;
+    }
+  });
+
+  const legendDot = (filled) => ({
+    display: 'inline-block', width: 14, height: 14, borderRadius: '50%', verticalAlign: 'middle', marginRight: 6,
+    boxSizing: 'border-box',
+    background: filled ? COLOR : 'transparent',
+    border: filled ? `2px solid ${COLOR}` : `2px solid ${PENDING}`,
+  });
+
+  return (
+    <div style={wrap}>
+      <div className="eyebrow" style={{ marginBottom: 6 }}>{label} · as-built progress</div>
+      <div className="mono designation">{panel.panel}</div>
+      <div className="source-line">{panel.title}</div>
+      <div className="source-line">{[panel.type, panel.node && 'Node ' + panel.node, panel.power].filter(Boolean).join(' · ')}</div>
+      {data.draft && (
+        <div style={{ fontSize: 12.5, color: AMBER, marginTop: 6 }}>
+          Draft data taken from the shop drawings — devices marked “confirm in field” need verification.
+        </div>
+      )}
+
+      {data.panels.length > 1 && (
+        <div className="floor-chips" style={{ marginTop: 12 }}>
+          {data.panels.map((p) => (
+            <button key={p.panel} className="fbtn" data-on={p.panel === panel.panel ? '1' : '0'} onClick={() => setSelPanel(p.panel)}>{p.panel}</button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', marginTop: 14, fontSize: 14 }}>
+        <span><b>{devDone}</b> of {devTotal} devices installed</span>
+        <span><b>{runDone}</b> of {runTotal} runs pulled</span>
+      </div>
+
+      <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 10, fontSize: 12.5, color: 'var(--color-text-2, #555)' }}>
+        <span><span style={legendDot(true)} />Installed</span>
+        <span><span style={legendDot(false)} />Not installed</span>
+        <span>
+          <span style={{ display: 'inline-block', width: 26, height: 6, borderRadius: 3, background: COLOR, verticalAlign: 'middle', marginRight: 6 }} />Pulled
+        </span>
+        <span>
+          <span style={{ display: 'inline-block', width: 26, height: 0, borderTop: `3px dashed ${PENDING}`, verticalAlign: 'middle', marginRight: 6 }} />Not pulled
+        </span>
+      </div>
+
+      <div className="edit-hint" style={{ marginTop: 10 }}>
+        {admin
+          ? 'Admin — click a run to mark it pulled; click a device to mark it installed. Click again to undo.'
+          : 'Read-only view. Log in as admin to mark runs pulled and devices installed.'}
+      </div>
+      {err && <div className="status" style={{ color: '#e5484d', marginTop: 8 }}>{err}</div>}
+
+      {panel.loops.map((lp) => {
+        const n = lp.devices.length;
+        const instCount = lp.devices.filter((d) => doneDev(d.id)).length;
+        let pulledCount = 0;
+        for (let i = 0; i <= n; i++) if (doneRun(`${lp.id}:R${i}`)) pulledCount += 1;
+
+        const runBtn = (i) => {
+          const rid = `${lp.id}:R${i}`;
+          const on = doneRun(rid);
+          const p = progress.runs[rid];
+          const from = i === 0 ? panel.panel : lp.devices[i - 1].id;
+          const to = i === n ? 'EOL' : lp.devices[i].id;
+          return (
+            <button
+              key={rid}
+              disabled={!admin || busyKey === 'run:' + rid}
+              onClick={() => toggle('run', rid)}
+              title={`${from} → ${to}\n${on ? 'Pulled ' + stamp(p) : 'Not pulled'}${admin ? '\nClick to ' + (on ? 'undo' : 'mark pulled') : ''}`}
+              style={{
+                width: 76, height: 28, flex: '0 0 76px', padding: 0, border: 0, background: 'none',
+                display: 'flex', alignItems: 'center', cursor: admin ? 'pointer' : 'default',
+              }}
+            >
+              <span style={{
+                display: 'block', width: '100%', boxSizing: 'border-box',
+                height: on ? 6 : 0, borderRadius: 3,
+                background: on ? COLOR : 'transparent',
+                borderTop: on ? 'none' : `3px dashed ${PENDING}`,
+              }} />
+            </button>
+          );
+        };
+
+        const items = [];
+        items.push(
+          <div key="panel" style={{
+            width: 92, flex: '0 0 92px', minHeight: 56, boxSizing: 'border-box', padding: '6px 8px',
+            border: '2px solid var(--color-text, #222)', borderRadius: 6, textAlign: 'center',
+          }}>
+            <div className="mono" style={{ fontSize: 13, fontWeight: 700 }}>{panel.panel}</div>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--color-text-2, #555)' }}>{lp.label}</div>
+          </div>
+        );
+        lp.devices.forEach((d, i) => {
+          items.push(runBtn(i));
+          const on = doneDev(d.id);
+          const p = progress.devices[d.id];
+          items.push(
+            <div key={d.id} style={{ position: 'relative', width: 28, flex: '0 0 28px' }}>
+              <button
+                disabled={!admin || busyKey === 'device:' + d.id}
+                onClick={() => toggle('device', d.id)}
+                title={`${d.id}\n${on ? 'Installed ' + stamp(p) : 'Not installed'}${admin ? '\nClick to ' + (on ? 'undo' : 'mark installed') : ''}`}
+                style={{
+                  width: 28, height: 28, borderRadius: '50%', boxSizing: 'border-box', padding: 0,
+                  background: on ? COLOR : 'var(--color-bg, #fff)',
+                  border: on ? `2px solid ${COLOR}` : `2px solid ${PENDING}`,
+                  color: '#fff', fontSize: 15, lineHeight: 1, fontWeight: 700,
+                  cursor: admin ? 'pointer' : 'default',
+                }}
+              >{on ? '✓' : ''}</button>
+              <div style={{ width: 104, marginLeft: -38, marginTop: 6, textAlign: 'center', fontSize: 11.5, lineHeight: 1.3 }}>
+                <div className="mono" style={{ fontWeight: 700, color: on ? COLOR : 'var(--color-text, #222)' }}>{d.id.split(':').pop()}</div>
+                <div className="mono" style={{ color: 'var(--color-text-2, #555)' }}>{devLabel(d)}</div>
+                <div className="mono">{d.room}</div>
+                <div style={{ color: 'var(--color-text-2, #555)' }}>{d.name}</div>
+                {d.confirm && <div style={{ color: AMBER, fontWeight: 600 }}>⚠ confirm in field</div>}
+              </div>
+            </div>
+          );
+        });
+        items.push(runBtn(n));
+        items.push(
+          <div key="eol" className="mono" style={{
+            width: 64, flex: '0 0 64px', height: 28, boxSizing: 'border-box', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', fontSize: 11, border: '2px solid var(--color-text, #222)', borderRadius: 4,
+          }}>{lp.eol || 'EOL'}</div>
+        );
+
+        return (
+          <div key={lp.id} style={{ marginTop: 26 }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'baseline', flexWrap: 'wrap' }}>
+              <span className="mono" style={{ fontSize: 14, fontWeight: 700 }}>NAC {lp.id}</span>
+              <span style={{ fontSize: 12.5, color: 'var(--color-text-2, #555)' }}>
+                {instCount}/{n} installed · {pulledCount}/{n + 1} pulled
+              </span>
+            </div>
+            <div style={{ overflowX: 'auto', paddingTop: 12, paddingBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', minWidth: 'max-content', paddingLeft: 38, paddingRight: 38 }}>
+                {items}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
