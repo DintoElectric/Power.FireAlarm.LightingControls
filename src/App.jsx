@@ -3,6 +3,7 @@ import { useParams, useLocation } from 'react-router-dom';
 import DrawingViewer from './DrawingViewer';
 import JboxEditor from './JboxEditor';
 import FireAlarmAdmin from './FireAlarmAdmin';
+import FireAlarmPage from './FireAlarmPage';
 import {
   floorOf, sheetFloor, linkedSheets, boxPlacements, distinctLabels,
   breaker, isSpare, sourceLabel, FLOOR_ORDER, naturalSort,
@@ -130,6 +131,8 @@ export default function App() {
   const [discShow, setDiscShow] = useState(true);
   const [discAck, setDiscAck] = useState(false);
   const [system, setSystem] = useState(startSystem);
+  const [faEdit, setFaEdit] = useState(false);     // "Edit Loops" editor open (Fire Alarm / Lighting)
+  const [faRefresh, setFaRefresh] = useState(0);   // bumped when the editor closes so the main page reloads its marks
 
   const applyOverrides = (d) => setOverrides({
     status: d.status || {}, circuits: d.circuits || {}, edited: d.edited || {},
@@ -366,6 +369,9 @@ export default function App() {
   }
   const cktColor = (n) => (n in liveMap ? (liveMap[n] ? '#b3202f' : '#137a2e') : undefined); // live = red, dead = green
 
+  const closeFaEdit = () => { setFaEdit(false); setFaRefresh((n) => n + 1); };
+  const scanPanel = slug && system === startSystem ? safeDecode(slug) : null;
+
   return (
     <>
     <div className="app">
@@ -376,7 +382,7 @@ export default function App() {
         )}
         <span className="wordmark">Dinto <span className="wordmark-2">As-Builts</span></span>
         <span className="tag tag-neutral">Public link · no sign-in</span>
-        <SystemSwitch system={system} onChange={setSystem} />
+        <SystemSwitch system={system} onChange={(s) => { setSystem(s); setFaEdit(false); }} />
         <input
           className="input search" style={system === 'power' ? undefined : { display: 'none' }}
           placeholder={panels.length ? `Search ${totalCircuits.toLocaleString()} circuits — try REFRIGERATOR, RTU, 324A` : 'Search circuits'}
@@ -387,6 +393,7 @@ export default function App() {
           {admin ? (
             <>
               {system === 'power' && <button className="btn btn-secondary" onClick={() => setJboxEdit(true)}>Edit J-boxes</button>}
+              {system !== 'power' && <button className="btn btn-secondary" onClick={() => setFaEdit(true)}>Edit Loops</button>}
               <span className="tag tag-accent">Admin</span>
               <button className="btn btn-ghost" onClick={logout}>Log out</button>
             </>
@@ -405,10 +412,7 @@ export default function App() {
       </header>
 
       {system !== 'power' ? (
-        <FireAlarmAdmin
-          system={system} admin={admin} token={token} onUnauthorized={logout}
-          initialPanel={slug && system === startSystem ? safeDecode(slug) : null}
-        />
+        <FireAlarmPage system={system} initialPanel={scanPanel} refreshKey={faRefresh} />
       ) : (
       <div className="grid" style={{ gridTemplateColumns: gridCols }}>
         {!full && !collapsed && (
@@ -605,6 +609,13 @@ export default function App() {
 
     {jboxEdit && admin && (
       <JboxEditor sheets={mergedSheets} onSave={saveJbox} onClose={() => setJboxEdit(false)} />
+    )}
+
+    {faEdit && admin && system !== 'power' && (
+      <FireAlarmAdmin
+        system={system} admin={admin} token={token} onUnauthorized={logout}
+        initialPanel={scanPanel} onClose={closeFaEdit}
+      />
     )}
 
     {system === 'power' && panel && !jboxEdit && (
