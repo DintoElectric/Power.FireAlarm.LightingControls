@@ -1,18 +1,44 @@
 # Dinto As-Builts — QR drawing access
 
-A public, no-login web app for reaching as-built branch-conduit drawings by QR
-code. A scan resolves to one panel; from there a field tech reads the circuit
-schedule, searches circuits across the job, and opens the linked drawings with
-that panel's J-boxes highlighted on the sheet.
+A public web app for reaching as-built information by QR code. A scan resolves to
+one panel. From there a field tech reads the schedule, and admins mark progress.
 
-Built from the Claude Design handoff (`design_handoff_asbuilt_qr`) against real
-Yale OML data: **134 panel schedules (3,480 circuits)** and **9 branch conduit
-sheets (606 tag placements, 543 per-sheet distinct box labels)**.
+Job: **Hartford Hospital, Conklin Building — Observation Unit Renovation Phase II**
 
-Stack: **Vite + React**, `pdfjs-dist` for vector rendering, Phosphor icons.
-No backend — both JSON files are fetched once on load and everything else is
-derived. The app is read-only by design; a field discrepancy is reported, never
-corrected in place.
+Stack: **Vite + React**, `pdfjs-dist` for vector drawing rendering, Phosphor icons,
+Netlify Functions + Netlify Blobs for the shared admin layer.
+
+## Three systems
+
+A switch in the header moves between systems. Each system has its own data folder.
+
+| System | Data | QR path | What it shows |
+|---|---|---|---|
+| Power | `public/data/` | `/p/<panel>` | Circuit schedule, linked drawings with J-boxes highlighted, live/dead status |
+| Fire Alarm | `public/data/firealarm/panels.json` | `/fa/<panel>` | One-line diagram per panel: click a run to mark it pulled, click a device to mark it installed |
+| Lighting Control | `public/data/lighting/panels.json` | `/lc/<panel>` | Same screen as Fire Alarm (data to be added) |
+
+Fire Alarm and Lighting Control data is taken from the shop drawings and is used as
+the as-built reference. Anything flagged `confirm` in the data shows as
+"confirm in field" until it is verified.
+
+## Admin
+
+Everyone can view. Only admins can change anything. Admin codes are set in Netlify
+under **Site configuration → Environment variables** as `ADMIN_CODES`, and each
+person's initials are stamped on what they change.
+
+Admins can:
+- Mark Power circuits and panels live or dead, and edit circuit descriptions, amps and poles
+- Edit which circuits each J-box carries (Power)
+- Mark Fire Alarm / Lighting runs pulled and devices installed
+
+Shared state lives in Netlify Blobs through `netlify/functions/overrides.mjs`:
+- Power edits are stored under one key.
+- Fire Alarm and Lighting progress are stored under their own keys, separate from Power.
+
+The static JSON files are never rewritten by the app. Corrections to the shop-drawing
+data can be made in the JSON without losing any marks that have been saved.
 
 ## Run locally
 
@@ -23,96 +49,57 @@ npm run build      # -> dist/
 npm run preview    # serve the production build
 ```
 
+The admin functions need Netlify's runtime, so use `netlify dev` if you want to test
+login and saving locally.
+
 ## Deploy: GitHub → Netlify
 
-I can't push to your accounts, so these are the steps to take it live.
+1. In Netlify choose **Add new site → Import an existing project** and pick this repo.
+   Build settings come from `netlify.toml` (`npm run build`, publish `dist`).
+2. Add the `ADMIN_CODES` environment variable, then redeploy.
+3. Optional: point a custom domain at the site.
 
-**1. Create the GitHub repo and push:**
-```bash
-git init
-git add .
-git commit -m "As-Built QR drawing access — initial build from design handoff"
-git branch -M main
-git remote add origin https://github.com/<you>/dinto-asbuilts.git
-git push -u origin main
-```
+`netlify.toml` and `public/_redirects` send every path to the app, so QR links such as
+`/p/...`, `/fa/...` and `/lc/...` resolve. Both also set `noindex`.
 
-**2. Connect Netlify:** In Netlify → *Add new site → Import an existing project*
-→ pick the repo. Build settings are already in `netlify.toml`:
-- Build command: `npm run build`
-- Publish directory: `dist`
+## QR labels
 
-Netlify auto-detects these, so you can accept the defaults. The included
-`netlify.toml` also sets the SPA fallback so the `/p/{job}-{panel}` QR route
-resolves, and adds `X-Robots-Tag: noindex`.
+Open `/qr.html` on the deployed site. Choose Power, Fire Alarm or Lighting Control,
+and it builds a label for each panel in that system, ready to print or download as PNG.
+Labels encode `<site address>/p/<panel>`, `/fa/<panel>` or `/lc/<panel>`.
 
-**3. Custom domain (optional):** point `asbuilt.dintoelectric.com` at the
-Netlify site to match the printed-label URL shape below.
+## Before launch
 
-## QR / printed-label URLs
-
-The printed panel label encodes:
-
-```
-asbuilt.dintoelectric.com/p/{job}-{panel}      e.g. /p/24118-LP2A
-```
-
-The route resolves the panel by matching the real schedule set (panel
-designations contain hyphens, so it matches the full name first, then strips the
-leading job token). Unknown or missing slugs land on the first panel.
-
-## Before launch — one real decision
-
-These are as-built electrical drawings for a medical building, and a public URL
-is **permanently public**. The app ships truly open (no login, read-only) to
-match the handoff. `noindex` keeps it out of search engines but does not gate
+These are as-built drawings for a hospital, and the URL is public. The app ships with
+no login for viewing, and `noindex` keeps it out of search engines but does not gate
 access. Confirm this is the intended access model before printing labels.
-
-## What's faithful to the handoff (and why)
-
-Three pieces are reusable logic, not just visual reference — a naive rebuild
-reproduces a bug that took real iteration to find. All three are preserved:
-
-- **Viewport-tile PDF rendering** (`src/DrawingViewer.jsx`). Three layers: a
-  full-page 3000px backdrop cached as JPEG; a viewport tile re-rendered from the
-  vector PDF over just the visible rectangle on every zoom/scroll (debounced,
-  in-flight render cancelled, tile geometry cleared before each pass); and the
-  SVG overlay. This is what keeps the sheet's own J-box labels legible at zoom.
-- **Overlay alignment.** The overlay uses `preserveAspectRatio="none"` and an
-  **unrounded** `viewBox` height (`1000 * pdfH / pdfW`). Either default —
-  `xMidYMid meet` or a rounded height — letterboxes the overlay and drifts every
-  highlight at Fit.
-- **J-box highlighting.** The tags are stacked callout text, so the highlight is
-  a box drawn over the printed label itself (glow + fill for the current panel,
-  a faint outline for every other tag), sized in sheet units and scaled by
-  `1/sqrt(zoom)`. No dot markers.
-
-Counts everywhere dedupe **by label** (`new Set(...map(b => b.label)).size`),
-never by raw array length — 606 placements exist for the per-sheet distinct box
-totals because some tags print twice on a sheet. Sheet linking is by tag, never
-by floor: 21 legitimate cross-floor links exist and off-floor sheets are marked
-`↗`.
-
-**Deliberately omitted:** conduit run-line tracing. The handoff has it built
-then disabled — the parenthetical on a tag is a box tag, not a circuit number,
-so a connecting line would imply a run the drawing does not state. Per-circuit
-highlighting and run tracing return with the revised drawings (see the handoff's
-*Deferred* section).
 
 ## Data
 
-`public/data/panels.json` and `public/data/drawings.json` are the extracted
-outputs from the handoff; `public/drawings/*.pdf` are the 9 source sheets (all
-slated to be replaced). The extraction pipeline that produced the JSON is
-documented in the handoff README under *Data model* — rebuild it server-side
-when admin upload/tagging is added (currently offline). A useful ingest
-invariant to keep: every J-box panel resolves to a schedule (0 orphans in the
-current data).
+- `public/data/panels.json`: Power panel schedules
+- `public/data/drawings.json`: Power drawing sheets and J-box tags
+- `public/data/panel_locations.json`: text locations for panels not linked to a drawing
+- `public/data/firealarm/panels.json`: Fire Alarm panels, loops and devices
+- `public/drawings/*.pdf`: source drawing sheets
+- `scripts/`: Python helpers used to extract J-boxes and callouts and to import circuits
+  for Power
 
-## Layout notes
+Counts dedupe by label, never by raw array length, because some tags print twice on a
+sheet. Sheets link to panels by tag, never by floor.
 
-Desktop/tablet three-column workspace, full viewport, columns scroll
-independently; full-sheet mode collapses to the drawing alone (`Esc` exits). The
-mobile screens in the handoff are direction-setting mockups — this build degrades
-gracefully to a stacked layout on narrow screens rather than implementing that
-phone design, which the handoff defers.
+## Drawing viewer notes
+
+- **Viewport-tile PDF rendering** (`src/DrawingViewer.jsx`): a cached full-page
+  backdrop, a viewport tile re-rendered from the vector PDF on every zoom or scroll,
+  and an SVG overlay. This keeps the sheet's own labels legible at zoom.
+- **Overlay alignment**: the overlay uses `preserveAspectRatio="none"` and an
+  unrounded `viewBox` height (`1000 * pdfH / pdfW`). The defaults letterbox the overlay
+  and make highlights drift at Fit.
+- **J-box highlighting**: a box drawn over the printed label, sized in sheet units and
+  scaled by `1/sqrt(zoom)`.
+
+## Layout
+
+Desktop and tablet use a three-column workspace. Columns scroll independently, and
+full-sheet mode shows the drawing alone (`Esc` exits). Narrow screens stack the
+columns.
