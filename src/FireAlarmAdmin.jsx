@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 const FN_OVR = '/.netlify/functions/overrides';
 const LABELS = { firealarm: 'Fire Alarm', lighting: 'Lighting Control' };
+const QR_PATH = { firealarm: '/fa/', lighting: '/lc/' };
 const COLOR = '#1f6feb';
 const PENDING = '#9aa0a6';
 const AMBER = '#d9a441';
@@ -16,6 +18,25 @@ const stamp = (p) => {
   return [when, p.by].filter(Boolean).join(' · ');
 };
 
+// Print-only styling for the progress sheet. Reuses the Power schedule's
+// .print-schedule / .ps-* classes from styles.css and adds the pieces below.
+const PRINT_CSS = `
+@media print {
+  body.has-fa-print #root { display: none !important; }
+  .fa-print .fa-project { font-size: 11px; font-weight: 700; margin: 6px 0 2px; }
+  .fa-print .fa-note { font-size: 9px; color: #333; margin-bottom: 6px; }
+  .fa-print .fa-loop { break-inside: avoid; margin-bottom: 14px; }
+  .fa-print .fa-loop-h { font-size: 12px; font-weight: 700; margin: 10px 0 4px; }
+  .fa-print .fa-loop-h span { font-weight: 400; font-size: 10px; margin-left: 10px; }
+  .fa-print .fa-table { font-size: 10px; }
+  .fa-print .fa-table td { height: 20px; }
+  .fa-print .fa-table tr { break-inside: avoid; }
+  .fa-print .fa-table td.fa-done { background: #e6efff; }
+  .fa-print .fa-box { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; vertical-align: middle; text-align: center; font-size: 10px; line-height: 10px; font-weight: 700; }
+  .fa-print .fa-stamp { font-size: 8.5px; margin-left: 3px; }
+}
+`;
+
 export default function FireAlarmAdmin({ system, admin, token, onUnauthorized, initialPanel }) {
   const [data, setData] = useState(null);
   const [loadState, setLoadState] = useState('loading'); // loading | ok | missing
@@ -23,6 +44,7 @@ export default function FireAlarmAdmin({ system, admin, token, onUnauthorized, i
   const [selPanel, setSelPanel] = useState(null);
   const [busyKey, setBusyKey] = useState(null);
   const [err, setErr] = useState('');
+  const [printedAt, setPrintedAt] = useState(() => new Date());
 
   const label = LABELS[system] || system;
 
@@ -58,6 +80,14 @@ export default function FireAlarmAdmin({ system, admin, token, onUnauthorized, i
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [system]);
+
+  // While the progress screen is showing, printing should output the progress sheet
+  // (hides the normal app root for print). Removed again when leaving this screen.
+  useEffect(() => {
+    if (loadState !== 'ok') return undefined;
+    document.body.classList.add('has-fa-print');
+    return () => document.body.classList.remove('has-fa-print');
+  }, [loadState]);
 
   const toggle = async (kind, id) => {
     if (!admin) return;
@@ -111,6 +141,26 @@ export default function FireAlarmAdmin({ system, admin, token, onUnauthorized, i
     }
   });
 
+  const ensureQR = () => new Promise((resolve) => {
+    if (window.QRCode) return resolve();
+    const el = document.createElement('script');
+    el.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    el.onload = resolve; el.onerror = resolve; document.head.appendChild(el);
+  });
+  const printSheet = async () => {
+    await ensureQR();
+    const holder = document.getElementById('fa-print-qr');
+    if (holder && window.QRCode) {
+      holder.innerHTML = '';
+      new window.QRCode(holder, {
+        text: window.location.origin + (QR_PATH[system] || '/fa/') + encodeURIComponent(panel.panel),
+        width: 92, height: 92, correctLevel: window.QRCode.CorrectLevel.M,
+      });
+    }
+    setPrintedAt(new Date());
+    setTimeout(() => window.print(), 250);
+  };
+
   const legendDot = (filled) => ({
     display: 'inline-block', width: 14, height: 14, borderRadius: '50%', verticalAlign: 'middle', marginRight: 6,
     boxSizing: 'border-box',
@@ -118,7 +168,97 @@ export default function FireAlarmAdmin({ system, admin, token, onUnauthorized, i
     border: filled ? `2px solid ${COLOR}` : `2px solid ${PENDING}`,
   });
 
+  const mark = (on, p) => (on
+    ? (<><span className="fa-box">✓</span><span className="fa-stamp">{stamp(p)}</span></>)
+    : <span className="fa-box" />);
+
+  const printBlock = (
+    <div className="print-schedule fa-print">
+      <style>{PRINT_CSS}</style>
+      <div className="ps-head">
+        <img className="ps-logo" src="/dinto-logo.png" alt="Dinto Electrical Contractors" />
+        <div className="ps-title">PANEL: {panel.panel}</div>
+        <div className="ps-power">{label.toUpperCase()} — AS-BUILT PROGRESS</div>
+        <div className="ps-meta">
+          <div>EQUIPMENT: {panel.type || ''}</div>
+          <div>NODE: {panel.node || ''}</div>
+          <div>POWER: {panel.power || ''}</div>
+          <div>INSTALLED: {devDone} of {devTotal} devices</div>
+          <div>PULLED: {runDone} of {runTotal} runs</div>
+          <div>PRINTED: {printedAt.toLocaleDateString()}</div>
+        </div>
+        <div id="fa-print-qr" className="ps-qr" />
+      </div>
+      {data.project && <div className="fa-project">{data.project}</div>}
+      <div className="fa-note">
+        {data.draft ? 'Draft data from the shop drawings. ' : ''}* = confirm in field. Shaded boxes are complete; date and initials show who marked them.
+      </div>
+
+      {panel.loops.map((lp) => {
+        const n = lp.devices.length;
+        const instCount = lp.devices.filter((d) => doneDev(d.id)).length;
+        let pulledCount = 0;
+        for (let i = 0; i <= n; i++) if (doneRun(`${lp.id}:R${i}`)) pulledCount += 1;
+        const eolRid = `${lp.id}:R${n}`;
+        const eolOn = doneRun(eolRid);
+        return (
+          <div className="fa-loop" key={lp.id}>
+            <div className="fa-loop-h">
+              NAC {lp.id}
+              <span>{instCount}/{n} installed · {pulledCount}/{n + 1} pulled</span>
+            </div>
+            <table className="ps-table fa-table">
+              <colgroup>
+                <col style={{ width: '15%' }} /><col style={{ width: '10%' }} /><col style={{ width: '17%' }} />
+                <col style={{ width: '10%' }} /><col style={{ width: '22%' }} /><col style={{ width: '13%' }} /><col style={{ width: '13%' }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Device</th><th>Run from</th><th>Type</th><th>Room</th><th>Location</th><th>Run pulled</th><th>Installed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lp.devices.map((d, i) => {
+                  const rid = `${lp.id}:R${i}`;
+                  const runOn = doneRun(rid);
+                  const devOn = doneDev(d.id);
+                  const from = i === 0 ? panel.panel : lp.devices[i - 1].id.split(':').pop();
+                  return (
+                    <tr key={d.id}>
+                      <td className="d mono">{d.id}</td>
+                      <td>{from}</td>
+                      <td className="d">{devLabel(d)}</td>
+                      <td>{d.room}{d.confirm ? ' *' : ''}</td>
+                      <td className="d">{d.name}</td>
+                      <td className={runOn ? 'd fa-done' : 'd'}>{mark(runOn, progress.runs[rid])}</td>
+                      <td className={devOn ? 'd fa-done' : 'd'}>{mark(devOn, progress.devices[d.id])}</td>
+                    </tr>
+                  );
+                })}
+                <tr>
+                  <td className="d">{lp.eol || 'EOL'}</td>
+                  <td>{n > 0 ? lp.devices[n - 1].id.split(':').pop() : panel.panel}</td>
+                  <td className="d">End-of-line resistor</td>
+                  <td></td>
+                  <td className="d"></td>
+                  <td className={eolOn ? 'd fa-done' : 'd'}>{mark(eolOn, progress.runs[eolRid])}</td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+
+      <div className="ps-foot">
+        <div>121 Turnpike Drive | Middlebury, CT 06762 | Tel: 203-575-9473</div>
+        <div>DINTOELECTRIC.COM | CT State Electrical License #100760 | AA/EOE</div>
+      </div>
+    </div>
+  );
+
   return (
+    <>
     <div style={wrap}>
       <div className="eyebrow" style={{ marginBottom: 6 }}>{label} · as-built progress</div>
       <div className="mono designation">{panel.panel}</div>
@@ -138,9 +278,10 @@ export default function FireAlarmAdmin({ system, admin, token, onUnauthorized, i
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', marginTop: 14, fontSize: 14 }}>
+      <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', marginTop: 14, fontSize: 14, alignItems: 'center' }}>
         <span><b>{devDone}</b> of {devTotal} devices installed</span>
         <span><b>{runDone}</b> of {runTotal} runs pulled</span>
+        <button className="btn btn-secondary" onClick={printSheet}>Print progress sheet</button>
       </div>
 
       <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 10, fontSize: 12.5, color: 'var(--color-text-2, #555)' }}>
@@ -257,5 +398,7 @@ export default function FireAlarmAdmin({ system, admin, token, onUnauthorized, i
         );
       })}
     </div>
+    {createPortal(printBlock, document.body)}
+    </>
   );
 }
